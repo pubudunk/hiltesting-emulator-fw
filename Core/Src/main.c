@@ -18,14 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "comm_handler.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <string.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,7 +34,17 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MAX_TEST_TASKS		5
+#define MAX_EMULATOR_TASKS	(1 + MAX_TEST_TASKS)   /* Additional UART Task */
 
+#define TASK_COMM			0
+#define TASK_TEST_GPIO_O	1
+#define TASK_TEST_GPIO_IO	2
+#define TASK_TEST_UART		3
+#define TASK_TEST_I2C		4
+#define TASK_TEST_CAN		5
+
+typedef void (*FuncPtr)(void *);
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,6 +57,9 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
+static TaskHandle_t xtaskHandles[MAX_EMULATOR_TASKS];
+static FuncPtr taskFuntions[1] = {vComm_Uart_Handler};
+static const char * taskNames[1] = {"vComm_Uart_Handler"};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -56,6 +68,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
+void vEmulator_Init( void );
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -95,16 +108,20 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  char *welcome_msg = "Welcome to HIL Testing Hardware Emulator\r\n";
 
-  printf("%s",welcome_msg);
+  printf("Test Emulator starting\n");
+
+  /* Init Emulator */
+  vEmulator_Init();
+
 /*
+ * char *welcome_msg = "Welcome to HIL Testing Hardware Emulator\r\n";
   HAL_UART_Transmit(&huart2, (uint8_t *)welcome_msg, strlen(welcome_msg), HAL_MAX_DELAY);
   HAL_Delay(1000);
 */
 
   /* start the scheduler */
-  //vTaskStartScheduler();
+  vTaskStartScheduler();
 
   /* USER CODE END 2 */
 
@@ -237,6 +254,24 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void vEmulator_Init( void )
+{
+	BaseType_t xReturned = pdFAIL;
+
+	/* Create UART2 handle task */
+	xReturned = xTaskCreate(taskFuntions[TASK_COMM]
+			, taskNames[TASK_COMM]
+			, (4 * configMINIMAL_STACK_SIZE)
+			, NULL
+			, tskIDLE_PRIORITY + 1,
+			&xtaskHandles[TASK_COMM]);
+	configASSERT(pdPASS == xReturned);
+
+
+	printf("Emulator Init complete\n");
+}
+
 
 /* USER CODE END 4 */
 
