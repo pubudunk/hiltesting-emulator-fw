@@ -18,10 +18,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "comm_handler.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
+#include "comm_handler.h"
+#include "test_case_handler.h"
+#include "semphr.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -34,15 +38,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MAX_TEST_TASKS		5
-#define MAX_EMULATOR_TASKS	(1 + MAX_TEST_TASKS)   /* Additional UART Task */
-
-#define TASK_COMM			0
-#define TASK_TEST_GPIO_O	1
-#define TASK_TEST_GPIO_IO	2
-#define TASK_TEST_UART		3
-#define TASK_TEST_I2C		4
-#define TASK_TEST_CAN		5
 
 typedef void (*FuncPtr)(void *);
 /* USER CODE END PD */
@@ -57,9 +52,24 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-static TaskHandle_t xtaskHandles[MAX_EMULATOR_TASKS];
-static FuncPtr taskFuntions[1] = {vComm_Uart_Handler};
-static const char * taskNames[1] = {"vComm_Uart_Handler"};
+TaskHandle_t xtaskHandles[MAX_EMULATOR_TASKS];
+static FuncPtr taskFuntions[MAX_EMULATOR_TASKS] = { vComm_Uart_Handler
+		, vGPIO_O_Test_Handler
+		, vGPIO_IO_Test_Handler
+		, vUART_Test_Handler
+		, vI2C_Test_Handler
+		, vCAN_Test_Handler };
+
+static const char * taskNames[MAX_EMULATOR_TASKS] = { "vComm_Uart_Handler"
+		, "vGPIO_O_Test_Handler"
+		, "vGPIO_IO_Test_Handler"
+		, "vUART_Test_Handler"
+		, "vI2C_Test_Handler"
+		, "vCAN_Test_Handler" };
+
+QueueHandle_t xTestTaskQueues[MAX_TEST_TASKS];
+SemaphoreHandle_t xLogMutex;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -107,9 +117,6 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
-
-  printf("Test Emulator starting\n");
 
   /* Init Emulator */
   vEmulator_Init();
@@ -259,17 +266,33 @@ void vEmulator_Init( void )
 {
 	BaseType_t xReturned = pdFAIL;
 
-	/* Create UART2 handle task */
-	xReturned = xTaskCreate(taskFuntions[TASK_COMM]
-			, taskNames[TASK_COMM]
+	/* Create UART2 communication handle task */
+	xReturned = xTaskCreate(taskFuntions[TASK_ID_COMM]
+			, taskNames[TASK_ID_COMM]
 			, (4 * configMINIMAL_STACK_SIZE)
 			, NULL
 			, tskIDLE_PRIORITY + 1,
-			&xtaskHandles[TASK_COMM]);
-	configASSERT(pdPASS == xReturned);
+			&xtaskHandles[TASK_ID_COMM]);
+	configASSERT( pdPASS == xReturned );
 
+	/* Create test tasks and task queues */
+	for(uint32_t i = 1; i <= MAX_TEST_TASKS; i++) {
+		xReturned = xTaskCreate(taskFuntions[i]
+				, taskNames[i]
+				, (2 * configMINIMAL_STACK_SIZE)
+				, (void *)i						/* Test Task ID */
+				, tskIDLE_PRIORITY + 1,
+				&xtaskHandles[i]);
+		configASSERT( pdPASS == xReturned );
 
-	printf("Emulator Init complete\n");
+		xTestTaskQueues[i -1] = xQueueCreate(MAX_TEST_TASKS, sizeof(struct TestTaskTLV));
+		configASSERT( xTestTaskQueues[i - 1] != NULL );
+	}
+
+	xLogMutex = xSemaphoreCreateRecursiveMutex();
+	configASSERT( xLogMutex != NULL );
+
+	Add_To_Log("Emulator Init complete\n");
 }
 
 

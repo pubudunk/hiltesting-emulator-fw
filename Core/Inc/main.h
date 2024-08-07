@@ -33,16 +33,26 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
+
+#include "logging.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+struct TestTaskTLV {
+	uint8_t ucId;
+	uint8_t ucLen;
+	uint8_t ucData[10];	//TODO: Change later if required
+};
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
+#define MAX_TEST_TASKS		5
+#define MAX_EMULATOR_TASKS	(1 + MAX_TEST_TASKS)   /* Additional UART Task */
 
+#define TASK_ID_COMM		0
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
