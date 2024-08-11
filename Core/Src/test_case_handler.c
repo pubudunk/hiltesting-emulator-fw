@@ -22,22 +22,35 @@ extern TaskHandle_t xtaskHandles[MAX_EMULATOR_TASKS];
 extern TIM_HandleTypeDef htim2;
 
 static uint8_t ucIsCaptureComplete = 0;
+static uint32_t ulLastCapture = 0;
+
+uint32_t GetTIM2ClockFreq(void) {
+    RCC_ClkInitTypeDef clkconfig;
+    uint32_t pFLatency;
+    HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+
+    uint32_t apb1Prescaler = clkconfig.APB1CLKDivider;
+    uint32_t apb1Freq = HAL_RCC_GetPCLK1Freq();
+
+    // Timers on APB1 will have their clocks multiplied by 2 if APB1 prescaler is not 1
+    return (apb1Prescaler == RCC_HCLK_DIV1) ? apb1Freq : (apb1Freq * 2);
+}
 
 void tim2_ch1_ic_callback(TIM_HandleTypeDef *htim)
 {
-	static uint32_t ulLastCapture = 0;
+
 
 	uint32_t ulCurrentCapture = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
 
 	if ( ucIsCaptureComplete == 0 ) {
 		if( ulLastCapture != 0 ) {
+			printf("ulLastCapture: %ld, ulCurrentCapture: %ld\n",ulLastCapture, ulCurrentCapture);
 			uint32_t diff = ulCurrentCapture - ulLastCapture;
-			float tim2CntFrq = 2 * HAL_RCC_GetPCLK1Freq() / (htim->Init.Prescaler + 1);
+			float tim2CntFrq = GetTIM2ClockFreq() / (htim->Init.Prescaler + 1);
 			float userSigPeriod = diff * (1 / tim2CntFrq);
-			uint32_t userFreq = 1 / userSigPeriod;
+			uint32_t userFreq = (uint32_t)(1.0 / userSigPeriod);
 
 			ucIsCaptureComplete = 1;
-			ulLastCapture = 0;
 
 			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 			xTaskNotifyIndexedFromISR(xtaskHandles[TASK_ID_O_TEST],
@@ -73,6 +86,7 @@ void vGPIO_O_Test_Handler( void * pvParameters )
 			xtaskTLV.ucData[0] = RESULT_FAIL;
 
 			ucIsCaptureComplete = 0;	/* Reset flag */
+			ulLastCapture = 0;
 			ulSigFreq = 0;
 			__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0); // Set the CCR1 to 0
 
@@ -84,7 +98,7 @@ void vGPIO_O_Test_Handler( void * pvParameters )
 			if( xRetured == pdTRUE ) {
 
 				/* Check if the frequency is in the expected range */
-				if( (ulSigFreq >= SIGNAL_FREQ*0.9) && (ulSigFreq <= SIGNAL_FREQ*1.1)) {	/* Actual frequency is 10Hz */
+				if( (ulSigFreq >= SIGNAL_FREQ*0.95) && (ulSigFreq <= SIGNAL_FREQ*1.05)) {	/* Actual frequency is 100Hz */
 					xtaskTLV.ucData[0] = RESULT_PASS;
 					Add_To_Log("Input Capture task success freq: %ld\n", ulSigFreq);
 				} else {
