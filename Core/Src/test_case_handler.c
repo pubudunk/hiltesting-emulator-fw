@@ -51,6 +51,8 @@ void tim2_ch1_ic_callback(TIM_HandleTypeDef *htim)
 	}
 }
 
+#define SIGNAL_FREQ		100
+
 void vGPIO_O_Test_Handler( void * pvParameters )
 {
 	BaseType_t xRetured = pdFAIL;
@@ -82,7 +84,7 @@ void vGPIO_O_Test_Handler( void * pvParameters )
 			if( xRetured == pdTRUE ) {
 
 				/* Check if the frequency is in the expected range */
-				if( (ulSigFreq > 0) && (ulSigFreq <= 20)) {	/* Actual frequency is 10Hz */
+				if( (ulSigFreq >= SIGNAL_FREQ*0.9) && (ulSigFreq <= SIGNAL_FREQ*1.1)) {	/* Actual frequency is 10Hz */
 					xtaskTLV.ucData[0] = RESULT_PASS;
 					Add_To_Log("Input Capture task success freq: %ld\n", ulSigFreq);
 				} else {
