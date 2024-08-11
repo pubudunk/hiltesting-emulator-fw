@@ -53,6 +53,11 @@ struct TestTaskTLV {
 #define MAX_EMULATOR_TASKS	(1 + MAX_TEST_TASKS)   /* Additional UART Task */
 
 #define TASK_ID_COMM		0
+#define TASK_ID_O_TEST		1
+#define TASK_ID_IO_TEST		2
+#define TASK_ID_UART_TEST	3
+#define TASK_ID_I2C_TEST	4
+#define TASK_ID_CAN_TEST	5
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
@@ -70,6 +75,10 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define B1_Pin GPIO_PIN_13
 #define B1_GPIO_Port GPIOC
+#define BTN_LED_IN_Pin GPIO_PIN_1
+#define BTN_LED_IN_GPIO_Port GPIOC
+#define BTN_OUT_Pin GPIO_PIN_1
+#define BTN_OUT_GPIO_Port GPIOA
 #define USART_TX_Pin GPIO_PIN_2
 #define USART_TX_GPIO_Port GPIOA
 #define USART_RX_Pin GPIO_PIN_3

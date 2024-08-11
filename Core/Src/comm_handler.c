@@ -149,9 +149,16 @@ void vComm_Uart_Handler( void * pvParameters )
 
 		/* Wait for Test Tasks complete */
 		uint8_t ucNotifications = 0;
+		uint32_t timeout = 0;
 		while (ucNotifications < ucTastsToWait) {
-			ucNotifications += ulTaskNotifyTakeIndexed(0, pdTRUE, pdMS_TO_TICKS(10000));
+			timeout = ulTaskNotifyTakeIndexed(0, pdTRUE, pdMS_TO_TICKS(10000));
+			if( timeout != 0)
+				ucNotifications += timeout;
+			else
+				Add_To_Log("Waiting for at one test task timeout\n");
 		}
+
+		Add_To_Log("All waited tasks returned or timeout \n");
 
 
 		/* Copy result data */
@@ -177,11 +184,12 @@ void vComm_Uart_Handler( void * pvParameters )
 					pucReplyBuffer[index + 2] = RESULT_FAIL;
 					index += 3;
 					ucDataLen += 3;
+					Add_To_Log("test %d timeout\n", i + 1);
 				}
 				ucNumLlvs++;
 
 				/* Single the task that data is read */
-				xTaskNotify(xtaskHandles[i + 1], 0x00, eNoAction); /* Test task indices start from 1 */
+				xTaskNotifyGiveIndexed(xtaskHandles[i + 1], 0); /* Test task indices start from 1 */
 			} else {
 				Add_To_Log("Test id: %d is not received for waiting\n", i+1);
 			}
