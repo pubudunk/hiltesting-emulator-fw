@@ -48,6 +48,8 @@ typedef void (*FuncPtr)(void *);
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CAN_HandleTypeDef hcan1;
+
 TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
@@ -79,6 +81,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_CAN1_Init(void);
 /* USER CODE BEGIN PFP */
 
 void vEmulator_Init( void );
@@ -123,6 +126,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_TIM2_Init();
+  MX_CAN1_Init();
   /* USER CODE BEGIN 2 */
 
   /* Init Emulator */
@@ -194,6 +198,43 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief CAN1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CAN1_Init(void)
+{
+
+  /* USER CODE BEGIN CAN1_Init 0 */
+
+  /* USER CODE END CAN1_Init 0 */
+
+  /* USER CODE BEGIN CAN1_Init 1 */
+	/* 250 kbps bus */
+  /* USER CODE END CAN1_Init 1 */
+  hcan1.Instance = CAN1;
+  hcan1.Init.Prescaler = 12;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_11TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
+  hcan1.Init.TimeTriggeredMode = DISABLE;
+  hcan1.Init.AutoBusOff = DISABLE;
+  hcan1.Init.AutoWakeUp = DISABLE;
+  hcan1.Init.AutoRetransmission = DISABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
+  hcan1.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CAN1_Init 2 */
+
+  /* USER CODE END CAN1_Init 2 */
+
 }
 
 /**
@@ -339,9 +380,29 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void CAN1_Filter_Config(void)
+{
+	HAL_StatusTypeDef status = HAL_ERROR;
+	CAN_FilterTypeDef sCAN1FilterID = {0};
+
+	sCAN1FilterID.FilterActivation =  ENABLE;
+	sCAN1FilterID.FilterBank = 0;
+	sCAN1FilterID.FilterFIFOAssignment = CAN_RX_FIFO0;
+	sCAN1FilterID.FilterIdHigh = (0x65 << 5);		/* Accept ID 0x65 */
+	sCAN1FilterID.FilterIdLow = 0x00;
+	sCAN1FilterID.FilterMaskIdHigh = 0x00;
+	sCAN1FilterID.FilterMaskIdLow = 0x00;
+	sCAN1FilterID.FilterMode = CAN_FILTERMODE_IDLIST;
+	sCAN1FilterID.FilterScale = CAN_FILTERSCALE_32BIT;
+
+	status = HAL_CAN_ConfigFilter(&hcan1, &sCAN1FilterID);
+	configASSERT( status == HAL_OK );
+}
+
 void vEmulator_Init( void )
 {
 	BaseType_t xReturned = pdFAIL;
+	HAL_StatusTypeDef status = HAL_ERROR;
 
 	/* Create UART2 communication handle task */
 	xReturned = xTaskCreate(taskFuntions[TASK_ID_COMM]
@@ -369,6 +430,17 @@ void vEmulator_Init( void )
 	xLogMutex = xSemaphoreCreateRecursiveMutex();
 	configASSERT( xLogMutex != NULL );
 
+	/* Set CAN Filter */
+	CAN1_Filter_Config();
+
+	/* Activate CAN1 */
+//	status = HAL_CAN_ActivateNotification(&hcan1,
+//			CAN_IT_TX_MAILBOX_EMPTY | CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_BUSOFF);		/* Activate interrupt */
+//	configASSERT(HAL_OK == status);
+
+	status = HAL_CAN_Start(&hcan1);	/* Move the CAN controller to Normal mode */
+	configASSERT(HAL_OK == status);
+
 	Add_To_Log("Emulator Init complete\n");
 }
 
@@ -379,6 +451,35 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	if( htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 ) {
 		tim2_ch1_ic_callback(htim);
 	}
+}
+
+void HAL_CAN_TxMailbox0CompleteCallback(CAN_HandleTypeDef *hcan)
+{
+	printf("Message Transmitted MB0\n");
+}
+void HAL_CAN_TxMailbox1CompleteCallback(CAN_HandleTypeDef *hcan)
+{
+	printf("Message Transmitted MB1\n");
+}
+
+void HAL_CAN_TxMailbox2CompleteCallback(CAN_HandleTypeDef *hcan)
+{
+	printf("Message Transmitted MB2\n");
+}
+
+extern void can1_rxfifo0_msg_pending_callback(CAN_HandleTypeDef *hcan);
+
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+
+	printf("RxFifo0 Message Pending\n");
+
+	can1_rxfifo0_msg_pending_callback(hcan);
+}
+
+void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan)
+{
+	printf("CAN Error: %lX\n", hcan->ErrorCode);
 }
 
 /* USER CODE END 4 */

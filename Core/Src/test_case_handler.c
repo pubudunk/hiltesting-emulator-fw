@@ -20,6 +20,7 @@ extern QueueHandle_t xTestTaskQueues[MAX_TEST_TASKS];
 extern TaskHandle_t xtaskHandles[MAX_EMULATOR_TASKS];
 
 extern TIM_HandleTypeDef htim2;
+extern CAN_HandleTypeDef hcan1;
 
 static uint8_t ucIsCaptureComplete = 0;
 static uint32_t ulLastCapture = 0;
@@ -38,8 +39,6 @@ uint32_t GetTIM2ClockFreq(void) {
 
 void tim2_ch1_ic_callback(TIM_HandleTypeDef *htim)
 {
-
-
 	uint32_t ulCurrentCapture = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
 
 	if ( ucIsCaptureComplete == 0 ) {
@@ -261,11 +260,43 @@ void vI2C_Test_Handler( void * pvParameters )
 	}
 }
 
+/* CAN ID: 0x65, Data: byte 0 - sensor ID 0x01, byte 1 sensor data */
+
+void can1_rxfifo0_msg_pending_callback(CAN_HandleTypeDef *hcan)
+{
+	HAL_StatusTypeDef status = 0;
+	CAN_RxHeaderTypeDef sRxHdr = {0};
+	uint8_t ucRxBuf[2] = {0};
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	uint32_t ulResult = 0;
+
+	status = HAL_CAN_GetRxMessage( hcan, CAN_RX_FIFO0, &sRxHdr, ucRxBuf );
+	if( status != HAL_OK ) {
+		printf("HAL_CAN_GetRxMessage Error %d\n", status);
+	}
+
+	/* inspect the data is correct */
+	if ( ucRxBuf[0] == 0x01 ) {
+		/* sensor ID field is correct. Iassume data field is correct */
+		ulResult = 1;
+	}
+
+	/* Notify the waiting task */
+	xTaskNotifyIndexedFromISR(xtaskHandles[TASK_ID_CAN_TEST],
+			1,
+			ulResult,
+			eSetValueWithOverwrite,
+			&xHigherPriorityTaskWoken);	/* Notify index 1 with value of signal freq */
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+}
+
 void vCAN_Test_Handler( void * pvParameters )
 {
 	BaseType_t xRetured = pdFAIL;
 	struct TestTaskTLV xtaskTLV;
 	uint32_t ulTaskId = (uint32_t)pvParameters;
+	HAL_StatusTypeDef status = HAL_ERROR;
+	uint32_t ulResult = 0;
 
 	for(;;) {
 
@@ -275,10 +306,39 @@ void vCAN_Test_Handler( void * pvParameters )
 			Add_To_Log("queue message received. Task: %ld, TVL id: %d len: %d\n",
 					ulTaskId, xtaskTLV.ucId, xtaskTLV.ucLen);
 
-			//TODO Execute the test
 			/* Update the result TLV */
 			xtaskTLV.ucLen = 0x01;
-			xtaskTLV.ucData[0] = RESULT_NA;
+			xtaskTLV.ucData[0] = RESULT_FAIL;
+
+			/* Activate interrupt */
+			status = HAL_CAN_ActivateNotification(&hcan1,
+					CAN_IT_TX_MAILBOX_EMPTY | CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_BUSOFF);
+			if( status == HAL_OK ) {
+
+				/* Wait on index 1 until notified by CAN RX isr */
+				xRetured = xTaskNotifyWaitIndexed(1, ULONG_MAX, 0, &ulResult, pdMS_TO_TICKS(3000));
+				if( xRetured == pdTRUE ) {
+
+					if( ulResult == 1 ) {	/* Correct CAN message received */
+						xtaskTLV.ucData[0] = RESULT_PASS;
+						Add_To_Log("CAN receive task success\n");
+					} else {
+						Add_To_Log("CAN receive task failed\n");
+					}
+				} else {
+					Add_To_Log("CAN receive task timeout\n");
+				}
+
+
+				/* Deactivate interrupt */
+				status = HAL_CAN_DeactivateNotification(&hcan1,
+						CAN_IT_TX_MAILBOX_EMPTY | CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_BUSOFF);
+				if ( status != HAL_OK ) {
+					Add_To_Log("HAL_CAN_DeactivateNotification failed. Error: %lx\n", status);
+				}
+			} else {
+				Add_To_Log("HAL_CAN_ActivateNotification failed. Error: %lx\n", status);
+			}
 
 			/* Send the data back to uart comm handler */
 			xQueueSend(xTestTaskQueues[ulTaskId - 1],
